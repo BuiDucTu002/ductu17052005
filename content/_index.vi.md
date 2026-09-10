@@ -27,7 +27,7 @@ chapter : false
 
 **Thời gian thực tập:** Từ 03/08/2026 đến 07/09/2026
 
-![Ảnh đại diện của bạn](ductu17052005/images/1/avatar.png)
+![Ảnh đại diện của bạn](/ductu17052005/images/1/avatar.png)
 
 ### Nội dung báo cáo
 
