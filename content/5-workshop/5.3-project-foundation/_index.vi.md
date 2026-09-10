@@ -31,8 +31,8 @@ Backend dùng Spring Boot 3.4.3, Java 21, Maven và port 8080. Các endpoint ch�
 
 `DB_HOST`, `DB_PASSWORD`, `SPRING_REDIS_HOST`, `SPRING_REDIS_PORT`, `AWS_S3_BUCKET`, `AWS_REGION`, `JWT_SIGNER_KEY`.
  
-![Ảnh của bạn](/images/5.3.1.png)
-![Ảnh của bạn](/images/5.3.2.png)
+![Ảnh của bạn](/ductu17052005/images/5.3.1.png)
+![Ảnh của bạn](/ductu17052005/images/5.3.2.png)
 
 ## Kết quả mong đợi
 Sau khi hoàn thành phần này, bạn sẽ:

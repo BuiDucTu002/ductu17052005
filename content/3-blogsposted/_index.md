@@ -1,5 +1,6 @@
 ---
-title: "3. Blogs Posted"
+title: "Blogs Posted"
+pre: "<b>3. </b>"
 date: 2026-09-10
 weight: 3
 chapter: false

@@ -1,5 +1,6 @@
 ---
-title: "5. Workshop - Triển khai EngGo trên AWS"
+title: "Workshop - Triển khai EngGo trên AWS"
+pre: "<b>5. </b>"
 date: 2026-09-10
 weight: 5
 chapter: true

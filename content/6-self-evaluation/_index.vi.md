@@ -1,5 +1,6 @@
 ---
-title: "6. Tự đánh giá"
+title: "Tự đánh giá"
+pre: "<b>6. </b>"
 date: 2026-09-10
 weight: 6
 chapter: false

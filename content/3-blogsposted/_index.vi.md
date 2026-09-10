@@ -1,5 +1,6 @@
 ---
-title: "3. Các bài viết đã đăng"
+title: "Các bài viết đã đăng"
+pre: "<b>3. </b>"
 date: 2026-09-10
 weight: 3
 chapter: false

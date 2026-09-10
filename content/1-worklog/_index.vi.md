@@ -1,5 +1,6 @@
 ---
-title: "1. Nhật ký công việc"
+title: "Nhật ký công việc"
+pre: "<b>1. </b>"
 date: 2026-09-10
 weight: 1
 chapter: false

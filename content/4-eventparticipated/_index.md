@@ -1,11 +1,12 @@
 ---
-title: "Event 1: TechMaker Coffee Talk #01"
+title: "Events Participated"
+pre: "<b>4. </b>"
 date: 2026-09-10
-weight: 1
+weight: 4
 chapter: false
 ---
 
-# Event 1: TECHMAKER COFFEE TALK #01 — AI FOR USER GROWTH & ACQUISITION
+# 4. Event: TECHMAKER COFFEE TALK #01 — AI FOR USER GROWTH & ACQUISITION
 
 > ⚠️ **Note:** The information below is for reference purposes only. Please do not copy it verbatim into your report, including this warning.
 
