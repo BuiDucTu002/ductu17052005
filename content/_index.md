@@ -27,8 +27,8 @@ chapter : false
 
 **Internship Duration:** From 03/08/2026 to 07/09/2026
 
-![Your profile picture](/images/1/avatar.png)
-![Your profile picture](/images/1/avatar.png)
+![Your profile picture](/ductu17052005/images/1/avatar.png)
+![Your profile picture](/ductu17052005/images/1/avatar.png)
 ### Report Content
 
 - [**1. Worklog**](1-worklog/)
