@@ -1,0 +1,631 @@
+5.1. Chuẩn bị môi trường
+Để triển khai toàn bộ hệ thống EngGo trên AWS theo chuẩn kiến trúc Cloud, bạn cần chuẩn bị các công cụ và tài nguyên cơ bản sau:
+
+1. Tài khoản & Quyền truy cập (AWS IAM)
+
+AWS Account: Đảm bảo tài khoản AWS đang hoạt động ở Region ap-northeast-1 (Tokyo).
+
+IAM User/Role: Tạo IAM User có quyền quản trị hoặc gán các Policy tối thiểu: AmazonVPCFullAccess, AmazonRDSFullAccess, AmazonS3FullAccess, AmazonEC2ContainerRegistryFullAccess, AmazonSSMFullAccess.
+
+2. Công cụ cài đặt trên máy Local (Dev Environment)
+
+AWS CLI v2: Đã cài đặt và cấu hình credentials bằng lệnh aws configure (truyền AWS Access Key ID, AWS Secret Access Key, Region ap-northeast-1).
+
+Docker & Docker Desktop: Dùng để build Docker Image cho ứng dụng Spring Boot Backend.
+
+JDK 21 & Maven: Dùng để đóng gói source code Backend (.jar).
+
+Git: Dùng để quản lý nguồn mã nguồn dự án enggo-backend.
+
+3. Danh sách thông số quy hoạch mạng (VPC Planning)
+
+VPC CIDR Block: 10.0.0.0/16
+
+Availability Zones (AZs): ap-northeast-1a và ap-northeast-1c
+
+Public Subnets: Dành cho Internet Gateway, Application Load Balancer (ALB), NAT Gateway.
+
+Private Subnets: Dành cho Backend (ECS/EC2) và Cơ sở dữ liệu (Amazon RDS MySQL).
+
+Cách kiểm tra thành công: Mở Terminal chạy lệnh aws sts get-caller-identity, kết quả trả về đúng Account ID và UserId của bạn.
+5.2. Thiết kế và triển khai VPC5.2.1. Khởi tạo VPCViệc khởi tạo một Amazon Virtual Private Cloud (VPC) riêng biệt giúp cách ly hoàn toàn hạ tầng mạng của hệ thống EngGo trên hạ tầng AWS, đảm bảo tính an toàn, bảo mật và khả năng kiểm soát lưu lượng truy cập.1. Thông số cấu hình quy hoạch VPCThông sốGiá trị cấu hìnhGiải thíchVPC Nameenggo-vpcTên định danh VPC cho dự án EngGo.IPv4 CIDR block10.0.0.0/16Dải IP nội bộ cung cấp tới 65,536 địa chỉ IP riêng.IPv6 CIDR blockNo IPv6 CIDR blockKhông sử dụng IPv6 trong mô hình này.TenancyDefaultSử dụng hạ tầng phần cứng dùng chung để tối ưu chi phí.DNS HostnamesEnabledCho phép các tài nguyên gán tên miền DNS nội bộ/công cộng.DNS ResolutionEnabledBật tính năng phân giải tên miền DNS trong VPC.2. Các bước thực hiện trên AWS Management ConsoleTruy cập vào AWS Management Console $\rightarrow$ Tìm kiếm và chọn dịch vụ VPC.Tại menu bên trái, chọn Your VPCs $\rightarrow$ Nhấn nút Create VPC.Chọn tùy chọn VPC only (chúng ta sẽ tự tạo Subnet, Route Table và Gateway ở các bước tiếp theo để kiểm soát chi tiết).Nhập các thông tin cấu hình:Name tag: enggo-vpcIPv4 CIDR block: 10.0.0.0/16Nhấn Create VPC.Sau khi khởi tạo xong, chọn enggo-vpc vừa tạo $\rightarrow$ Chọn menu Actions $\rightarrow$ Edit VPC settings.Tích chọn Enable DNS hostnames và Enable DNS resolution $\rightarrow$ Nhấn Save changes.3. Hướng dẫn khởi tạo bằng AWS CLINếu triển khai bằng dòng lệnh (AWS CLI), thực hiện lần lượt các lệnh sau:Bash# 1. Khởi tạo VPC với CIDR 10.0.0.0/16 và gán Name tag
+VPC_ID=$(aws ec2 create-vpc \
+  --cidr-block 10.0.0.0/16 \
+  --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=enggo-vpc}]' \
+  --query 'Vpc.VpcId' \
+  --output text)
+
+echo "Đã tạo VPC thành công với ID: $VPC_ID"
+
+# 2. Bật tính năng DNS Hostnames cho VPC
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-hostnames '{"Value": true}'
+
+# 3. Bật tính năng DNS Support cho VPC
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-support '{"Value": true}'
+4. Kết quả nghiệm thu (Verification)Trạng thái: VPC enggo-vpc chuyển sang trạng thái Available.IPv4 CIDR: Được gán chính xác dải 10.0.0.0/16.DNS Settings: Cả hai tùy chọn DNS hostnames và DNS resolution đều ghi nhận trạng thái Enabled.
+5.2. Thiết kế và triển khai VPC5.2.1. Khởi tạo VPCViệc khởi tạo một Amazon Virtual Private Cloud (VPC) riêng biệt giúp cách ly hoàn toàn hạ tầng mạng của hệ thống EngGo trên hạ tầng AWS, đảm bảo tính an toàn, bảo mật và khả năng kiểm soát lưu lượng truy cập.1. Thông số cấu hình quy hoạch VPCThông sốGiá trị cấu hìnhGiải thíchVPC Nameenggo-vpcTên định danh VPC cho dự án EngGo.IPv4 CIDR block10.0.0.0/16Dải IP nội bộ cung cấp tới 65,536 địa chỉ IP riêng.IPv6 CIDR blockNo IPv6 CIDR blockKhông sử dụng IPv6 trong mô hình này.TenancyDefaultSử dụng hạ tầng phần cứng dùng chung để tối ưu chi phí.DNS HostnamesEnabledCho phép các tài nguyên gán tên miền DNS nội bộ/công cộng.DNS ResolutionEnabledBật tính năng phân giải tên miền DNS trong VPC.2. Các bước thực hiện trên AWS Management ConsoleTruy cập vào AWS Management Console $\rightarrow$ Tìm kiếm và chọn dịch vụ VPC.Tại menu bên trái, chọn Your VPCs $\rightarrow$ Nhấn nút Create VPC.Chọn tùy chọn VPC only (chúng ta sẽ tự tạo Subnet, Route Table và Gateway ở các bước tiếp theo để kiểm soát chi tiết).Nhập các thông tin cấu hình:Name tag: enggo-vpcIPv4 CIDR block: 10.0.0.0/16Nhấn Create VPC.Sau khi khởi tạo xong, chọn enggo-vpc vừa tạo $\rightarrow$ Chọn menu Actions $\rightarrow$ Edit VPC settings.Tích chọn Enable DNS hostnames và Enable DNS resolution $\rightarrow$ Nhấn Save changes.3. Hướng dẫn khởi tạo bằng AWS CLINếu triển khai bằng dòng lệnh (AWS CLI), thực hiện lần lượt các lệnh sau:Bash# 1. Khởi tạo VPC với CIDR 10.0.0.0/16 và gán Name tag
+VPC_ID=$(aws ec2 create-vpc \
+  --cidr-block 10.0.0.0/16 \
+  --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=enggo-vpc}]' \
+  --query 'Vpc.VpcId' \
+  --output text)
+
+echo "Đã tạo VPC thành công với ID: $VPC_ID"
+
+# 2. Bật tính năng DNS Hostnames cho VPC
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-hostnames '{"Value": true}'
+
+# 3. Bật tính năng DNS Support cho VPC
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-support '{"Value": true}'
+4. Kết quả nghiệm thu (Verification)Trạng thái: VPC enggo-vpc chuyển sang trạng thái Available.IPv4 CIDR: Được gán chính xác dải 10.0.0.0/16.DNS Settings: Cả hai tùy chọn DNS hostnames và DNS resolution đều ghi nhận trạng thái Enabled.
+5.2.3. Tạo và cấu hình Internet GatewayInternet Gateway (IGW) đóng vai trò là cổng giao tiếp cho phép các tài nguyên nằm trong dải Public Subnet (như Application Load Balancer hay NAT Gateway) kết nối ra ngoài Internet và ngược lại, tiếp nhận các yêu cầu truy cập từ người dùng thông qua giao thức HTTP/HTTPS.1. Thông số cấu hình Internet GatewayThông sốGiá trị cấu hìnhGiải thíchInternet Gateway Nameenggo-igwTên định danh cho cổng Internet Gateway của dự án EngGo.Attached VPCenggo-vpcVPC được liên kết trực tiếp với Internet Gateway này.2. Các bước thực hiện trên AWS Management ConsoleTruy cập AWS Management Console $\rightarrow$ Dịch vụ VPC $\rightarrow$ Chọn Internet gateways ở menu bên trái.Nhấn nút Create internet gateway.Tại ô Name tag, nhập: enggo-igw.Nhấn nút Create internet gateway.Sau khi khởi tạo, cổng ở trạng thái Unattached. Đánh dấu chọn enggo-igw $\rightarrow$ Chọn Actions $\rightarrow$ Attach to VPC.Tại mục Available VPCs, chọn enggo-vpc $\rightarrow$ Nhấn Attach internet gateway.3. Hướng dẫn khởi tạo bằng AWS CLIBash# 1. Khởi tạo Internet Gateway và lấy IGW ID
+IGW_ID=$(aws ec2 create-internet-gateway \
+  --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=enggo-igw}]' \
+  --query 'InternetGateway.InternetGatewayId' \
+  --output text)
+
+echo "Đã tạo Internet Gateway thành công với ID: $IGW_ID"
+
+# 2. Attach Internet Gateway vào enggo-vpc
+aws ec2 attach-internet-gateway \
+  --vpc-id $VPC_ID \
+  --internet-gateway-id $IGW_ID
+
+echo "Đã gắn Internet Gateway $IGW_ID vào VPC $VPC_ID"
+4. Kết quả nghiệm thu (Verification)State: Internet Gateway enggo-igw chuyển từ Unattached sang trạng thái Attached.VPC ID: Ghi nhận chính xác ID của enggo-vpc.
+.2.4. Tạo NAT Gateway
+NAT Gateway (Network Address Translation Gateway) cho phép các tài nguyên trong Private Subnet (như các ECS Task chạy ứng dụng Spring Boot Backend, máy chủ RDS MySQL) có thể chủ động ra Internet để tải bản cập nhật, tải thư viện dependencies, hoặc gửi dữ liệu qua các dịch vụ bên thứ ba mà không bị lộ địa chỉ IP công cộng ra bên ngoài.
+
+1. Thông số cấu hình NAT Gateway
+Thông số	Giá trị cấu hình	Giải thích
+Name	enggo-nat-gw	Tên định danh cho NAT Gateway.
+Subnet	enggo-public-subnet-1a	Bắt buộc đặt trong Public Subnet để giao tiếp với Internet.
+Connectivity type	Public	Sử dụng cho lưu lượng đi ra Internet công cộng.
+Elastic IP Allocation	Elastic IP tự sinh	Địa chỉ IP Tĩnh công cộng dành riêng cho NAT Gateway.
+2. Các bước thực hiện trên AWS Management Console
+Truy cập AWS Management Console → Dịch vụ VPC → Chọn NAT gateways ở menu bên trái.
+
+Nhấn nút Create NAT gateway.
+
+Điền các thông tin cấu hình:
+
+Name: enggo-nat-gw
+
+Subnet: Chọn enggo-public-subnet-1a
+
+Connectivity type: Chọn Public
+
+Tại mục Elastic IP allocation ID, nhấn nút Allocate Elastic IP để hệ thống tự động gán một IP Tĩnh công cộng mới.
+
+Nhấn nút Create NAT gateway.
+
+Lưu ý: Quá trình khởi tạo NAT Gateway sẽ mất khoảng 1–3 phút để chuyển sang trạng thái sẵn sàng hoạt động.
+
+3. Hướng dẫn khởi tạo bằng AWS CLI
+Bash
+# 1. Cấp phát Elastic IP (EIP) cho NAT Gateway
+EIP_ALLOC_ID=$(aws ec2 allocate-address \
+  --domain vpc \
+  --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=enggo-nat-eip}]' \
+  --query 'AllocationId' \
+  --output text)
+
+echo "Đã cấp phát Elastic IP với Allocation ID: $EIP_ALLOC_ID"
+
+# 2. Khởi tạo NAT Gateway tại Public Subnet 1a
+NAT_GW_ID=$(aws ec2 create-nat-gateway \
+  --subnet-id $SUBNET_PUB_1A \
+  --allocation-id $EIP_ALLOC_ID \
+  --tag-specifications 'ResourceType=natgateway,Tags=[{Key=Name,Value=enggo-nat-gw}]' \
+  --query 'NatGateway.NatGatewayId' \
+  --output text)
+
+echo "Đã tạo NAT Gateway thành công với ID: $NAT_GW_ID"
+4. Kết quả nghiệm thu (Verification)
+State: NAT Gateway enggo-nat-gw chuyển sang trạng thái Available.
+
+Elastic IP address: Được gán thành công một địa chỉ IPv4 công cộng tĩnh (Public IPv4).
+
+VPC & Subnet: Đặt chính xác tại enggo-vpc và enggo-public-subnet-1a.
+5.2.5. Cấu hình Route TableRoute Table (Bảng tuyến đường) chứa các quy tắc (Routes) định hướng lưu lượng mạng (Network Traffic) từ các Subnet ra bên ngoài hoặc giữa các thành phần nội bộ trong VPC. Để đảm bảo tính phân định rõ ràng giữa môi trường Public và Private, chúng ta sẽ định cấu hình 02 Route Table riêng biệt:Public Route Table (enggo-public-rt): Định tuyến tất cả lưu lượng đi ra ngoài Internet (0.0.0.0/0) thông qua Internet Gateway (IGW).Private Route Table (enggo-private-rt): Định tuyến lưu lượng đi ra ngoài Internet (0.0.0.0/0) thông qua NAT Gateway.1. Bảng quy hoạch Route Table và Subnet AssociationTên Route TableTarget (Đích đến)DestinationSubnet Liên kết (Associated Subnets)Loạienggo-public-rtInternet Gateway (enggo-igw)0.0.0.0/0enggo-public-subnet-1aenggo-public-subnet-1cPublicenggo-private-rtNAT Gateway (enggo-nat-gw)0.0.0.0/0enggo-private-subnet-1aenggo-private-subnet-1cPrivate2. Các bước thực hiện trên AWS Management ConsoleBước A: Cấu hình Public Route TableTruy cập AWS Management Console $\rightarrow$ Dịch vụ VPC $\rightarrow$ Chọn Route tables ở menu bên trái.Nhấn Create route table.Cấu hình:Name: enggo-public-rtVPC: Chọn enggo-vpcNhấn Create route table.Thêm tuyến đường (Route):Chọn enggo-public-rt $\rightarrow$ Tab Routes $\rightarrow$ Nhấn Edit routes.Nhấn Add route:Destination: 0.0.0.0/0Target: Select Internet Gateway $\rightarrow$ Chọn enggo-igw.Nhấn Save changes.Gán Subnet (Subnet Association):Chuyển sang tab Subnet associations $\rightarrow$ Nhấn Edit subnet associations.Tích chọn 2 Public Subnet: enggo-public-subnet-1a và enggo-public-subnet-1c.Nhấn Save associations.Bước B: Cấu hình Private Route TableNhấn Create route table.Cấu hình:Name: enggo-private-rtVPC: Chọn enggo-vpcNhấn Create route table.Thêm tuyến đường (Route):Chọn enggo-private-rt $\rightarrow$ Tab Routes $\rightarrow$ Nhấn Edit routes.Nhấn Add route:Destination: 0.0.0.0/0Target: Select NAT Gateway $\rightarrow$ Chọn enggo-nat-gw.Nhấn Save changes.Gán Subnet (Subnet Association):Chuyển sang tab Subnet associations $\rightarrow$ Nhấn Edit subnet associations.Tích chọn 2 Private Subnet: enggo-private-subnet-1a và enggo-private-subnet-1c.Nhấn Save associations.3. Hướng dẫn thực hiện bằng AWS CLIBash# ----------------------------------------------------
+# 1. CẤU HÌNH PUBLIC ROUTE TABLE
+# ----------------------------------------------------
+# Tạo Public Route Table
+RT_PUB_ID=$(aws ec2 create-route-table \
+  --vpc-id $VPC_ID \
+  --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=enggo-public-rt}]' \
+  --query 'RouteTable.RouteTableId' \
+  --output text)
+
+# Tạo Route trỏ Internet Traffic (0.0.0.0/0) tới Internet Gateway
+aws ec2 create-route \
+  --route-table-id $RT_PUB_ID \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id $IGW_ID
+
+# Associate Public Route Table với 2 Public Subnet
+aws ec2 associate-route-table --subnet-id $SUBNET_PUB_1A --route-table-id $RT_PUB_ID
+aws ec2 associate-route-table --subnet-id $SUBNET_PUB_1C --route-table-id $RT_PUB_ID
+
+# ----------------------------------------------------
+# 2. CẤU HÌNH PRIVATE ROUTE TABLE
+# ----------------------------------------------------
+# Tạo Private Route Table
+RT_PRI_ID=$(aws ec2 create-route-table \
+  --vpc-id $VPC_ID \
+  --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=enggo-private-rt}]' \
+  --query 'RouteTable.RouteTableId' \
+  --output text)
+
+# Tạo Route trỏ Internet Traffic (0.0.0.0/0) tới NAT Gateway
+aws ec2 create-route \
+  --route-table-id $RT_PRI_ID \
+  --destination-cidr-block 0.0.0.0/0 \
+  --nat-gateway-id $NAT_GW_ID
+
+# Associate Private Route Table với 2 Private Subnet
+aws ec2 associate-route-table --subnet-id $SUBNET_PRI_1A --route-table-id $RT_PRI_ID
+aws ec2 associate-route-table --subnet-id $SUBNET_PRI_1C --route-table-id $RT_PRI_ID
+4. Kết quả nghiệm thu (Verification)Public Subnets (enggo-public-subnet-1a, 1c): Đã gắn với enggo-public-rt, lưu lượng 0.0.0.0/0 được đẩy ra Internet qua enggo-igw.Private Subnets (enggo-private-subnet-1a, 1c): Đã gắn với enggo-private-rt, lưu lượng 0.0.0.0/0 được đẩy ra Internet an toàn thông qua enggo-nat-gw.
+5.2.6. Cấu hình Security GroupSecurity Group đóng vai trò như một bức tường lửa ảo (Stateful Firewall) cấp độ thể hiện/máy chủ, kiểm soát chặt chẽ các lưu lượng truy cập đầu vào (Inbound Rules) và đầu ra (Outbound Rules) cho từng tầng ứng dụng trong VPC enggo-vpc.Để đảm bảo nguyên tắc bảo mật tối thiểu (Principle of Least Privilege), chúng ta sẽ tạo 03 Security Group tương ứng cho 3 tầng: ALB, Backend (ECS/Fargate) và Database (RDS MySQL).1. Bảng quy hoạch Security GroupTên Security GroupTầng áp dụngInbound Rules (Cho phép đầu vào)Mục đích bảo mậtenggo-alb-sgApplication Load Balancer• Port 80 (HTTP) từ 0.0.0.0/0• Port 443 (HTTPS) từ 0.0.0.0/0Cho phép người dùng kết nối công khai vào Load Balancer.enggo-backend-sgECS Fargate Tasks (Spring Boot)• Port 8080 (TCP) từ enggo-alb-sgChỉ cho phép traffic đi qua ALB vào Backend (Chặn truy cập trực tiếp từ Internet).enggo-db-sgRDS MySQL Database• Port 3306 (MySQL) từ enggo-backend-sgChỉ chấp nhận kết nối cơ sở dữ liệu từ tầng Backend.2. Các bước thực hiện trên AWS Management ConsoleBước 1: Tạo Security Group cho Load Balancer (enggo-alb-sg)Truy cập AWS Management Console $\rightarrow$ Dịch vụ VPC $\rightarrow$ Chọn Security groups.Nhấn Create security group.Cấu hình:Security group name: enggo-alb-sgDescription: Security group for Application Load BalancerVPC: Chọn enggo-vpcInbound rules:Rule 1: Type: HTTP | Port: 80 | Source: Anywhere-IPv4 (0.0.0.0/0)Rule 2: Type: HTTPS | Port: 443 | Source: Anywhere-IPv4 (0.0.0.0/0)Nhấn Create security group.Bước 2: Tạo Security Group cho Backend (enggo-backend-sg)Nhấn Create security group.Cấu hình:Security group name: enggo-backend-sgDescription: Security group for Spring Boot ECS TasksVPC: Chọn enggo-vpcInbound rules:Rule 1: Type: Custom TCP | Port: 8080 | Source: Chọn Custom $\rightarrow$ Nhập ID của enggo-alb-sg.Nhấn Create security group.Bước 3: Tạo Security Group cho Database (enggo-db-sg)Nhấn Create security group.Cấu hình:Security group name: enggo-db-sgDescription: Security group for Amazon RDS MySQLVPC: Chọn enggo-vpcInbound rules:Rule 1: Type: MYSQL/Aurora | Port: 3306 | Source: Chọn Custom $\rightarrow$ Nhập ID của enggo-backend-sg.Nhấn Create security group.3. Hướng dẫn thực hiện bằng AWS CLIBash# 1. Tạo ALB Security Group
+ALB_SG_ID=$(aws ec2 create-security-group \
+  --group-name enggo-alb-sg \
+  --description "Security group for ALB" \
+  --vpc-id $VPC_ID \
+  --query 'GroupId' --output text)
+
+# Thêm rule cho phép HTTP/HTTPS vào ALB SG
+aws ec2 authorize-security-group-ingress --group-id $ALB_SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id $ALB_SG_ID --protocol tcp --port 443 --cidr 0.0.0.0/0
+
+# 2. Tạo Backend Security Group
+BACKEND_SG_ID=$(aws ec2 create-security-group \
+  --group-name enggo-backend-sg \
+  --description "Security group for Spring Boot ECS" \
+  --vpc-id $VPC_ID \
+  --query 'GroupId' --output text)
+
+# Thêm rule cho phép Port 8080 TỪ ALB_SG_ID
+aws ec2 authorize-security-group-ingress --group-id $BACKEND_SG_ID --protocol tcp --port 8080 --source-group $ALB_SG_ID
+
+# 3. Tạo Database Security Group
+DB_SG_ID=$(aws ec2 create-security-group \
+  --group-name enggo-db-sg \
+  --description "Security group for RDS MySQL" \
+  --vpc-id $VPC_ID \
+  --query 'GroupId' --output text)
+
+# Thêm rule cho phép Port 3306 TỪ BACKEND_SG_ID
+aws ec2 authorize-security-group-ingress --group-id $DB_SG_ID --protocol tcp --port 3306 --source-group $BACKEND_SG_ID
+4. Kết quả nghiệm thu (Verification)Cả 3 Security Group (enggo-alb-sg, enggo-backend-sg, enggo-db-sg) đều nằm trong enggo-vpc.Mô hình liên kết chuỗi (Security Group Chaining) hoạt động chính xác: Internet $\rightarrow$ ALB SG $\rightarrow$ Backend SG $\rightarrow$ Database SG.
+5.2.7. Cấu hình S3 EndpointĐể ứng dụng Spring Boot Backend trong Private Subnet giao tiếp với Amazon S3 (tải lên/tải xuống tài nguyên hình ảnh, âm thanh bài học) một cách an toàn và tối ưu nhất, hệ thống triển khai VPC Gateway Endpoint for S3.Cấu hình này giúp lưu lượng truyền tải đi qua đường truyền nội bộ riêng của AWS (AWS Private Backbone Network) mà không cần đi qua NAT Gateway, từ đó giảm chi phí băng thông NAT và tăng hiệu năng/độ bảo mật.1. Thông số cấu hình S3 Gateway EndpointThông sốGiá trị cấu hìnhGiải thíchNameenggo-s3-endpointTên định danh VPC Endpoint dành cho Amazon S3.Service CategoryAWS servicesChọn dịch vụ chính chủ do AWS cung cấp.Service Namecom.amazonaws.ap-northeast-1.s3Dịch vụ S3 thuộc Region Tokyo (ap-northeast-1).Endpoint TypeGatewayLoại Endpoint không tốn chi phí giờ chạy (Free of charge).VPCenggo-vpcVPC hệ thống của dự án.Route Tablesenggo-private-rtTự động thêm tuyến đường truy cập S3 vào Route Table này.2. Các bước thực hiện trên AWS Management ConsoleTruy cập AWS Management Console $\rightarrow$ Dịch vụ VPC $\rightarrow$ Chọn Endpoints ở menu bên trái.Nhấn nút Create endpoint.Tại phần Name tag, nhập: enggo-s3-endpoint.Tại mục Service category, chọn AWS services.Tại thanh tìm kiếm Services, gõ s3 $\rightarrow$ Chọn Service có tên dạng com.amazonaws.ap-northeast-1.s3 với Type là Gateway.Tại mục VPC, chọn enggo-vpc.Tại mục Route tables, tích chọn enggo-private-rt (và enggo-public-rt nếu muốn áp dụng cho cả Public Subnet).Tại mục Policy, giữ nguyên Full Access (hoặc tùy chỉnh cấp quyền riêng cho S3 Bucket của dự án).Nhấn Create endpoint.3. Hướng dẫn thực hiện bằng AWS CLIBash# Khởi tạo S3 Gateway Endpoint và gắn trực tiếp vào Private Route Table
+S3_ENDPOINT_ID=$(aws ec2 create-vpc-endpoint \
+  --vpc-id $VPC_ID \
+  --service-name com.amazonaws.ap-northeast-1.s3 \
+  --route-table-ids $RT_PRI_ID \
+  --tag-specifications 'ResourceType=vpc-endpoint,Tags=[{Key=Name,Value=enggo-s3-endpoint}]' \
+  --query 'VpcEndpoint.VpcEndpointId' \
+  --output text)
+
+echo "Đã tạo S3 VPC Gateway Endpoint thành công với ID: $S3_ENDPOINT_ID"
+4. Kết quả nghiệm thu (Verification)State: VPC Endpoint enggo-s3-endpoint chuyển sang trạng thái Available.Route Table: Khi kiểm tra lại tab Routes của enggo-private-rt, xuất hiện thêm một dòng định tuyến tự động:Destination: pl-xxxxxx (Prefix List ID đại diện cho danh sách IP của Amazon S3).Target: vpce-xxxxxx (ID của enggo-s3-endpoint).
+5.3. Triển khai các dịch vụ lưu trữ5.3.1. Tạo Amazon S3 BucketAmazon S3 (Simple Storage Service) đóng vai trò lưu trữ các tập tin đa phương tiện tĩnh (hình ảnh đại diện, file âm thanh phát âm, dữ liệu tài liệu học tập) cho hệ thống EngGo. Bucket được cấu hình với quyền truy cập phù hợp, đảm bảo an toàn và kết nối tốt với Spring Boot Backend.1. Thông số cấu hình Amazon S3 BucketThông sốGiá trị cấu hìnhGiải thíchBucket Nameenggo-media-bucketTên duy nhất trên toàn hệ thống Amazon S3.AWS Regionap-northeast-1 (Tokyo)Cùng Region với hạ tầng VPC để tối ưu độ trễ.Object OwnershipACLs disabledKhuyến nghị của AWS, quản lý quyền hoàn toàn qua Bucket Policy.Block Public AccessBlock all public accessChặn toàn bộ truy cập công khai trực tiếp từ Internet.Bucket VersioningEnableQuản lý lịch sử phiên bản để tránh mất mát file ngẫu nhiên.Server-side EncryptionSSE-S3 (AES-256)Mã hóa tự động toàn bộ dữ liệu lưu trên S3 ở mức lưu trữ.2. Các bước thực hiện trên AWS Management ConsoleTruy cập AWS Management Console $\rightarrow$ Tìm kiếm và chọn dịch vụ S3.Tại bảng điều khiển, nhấn nút Create bucket.Cấu hình các mục cơ bản:Bucket name: enggo-media-bucketAWS Region: Chọn Asia Pacific (Tokyo) ap-northeast-1.Tại mục Object Ownership: Chọn ACLs disabled (recommended).Tại mục Block Public Access settings for this bucket:Giữ tích chọn Block all public access để bảo vệ dữ liệu nội bộ.Tại mục Bucket Versioning: Chọn Enable.Tại mục Default encryption: Chọn Server-side encryption with Amazon S3 managed keys (SSE-S3).Nhấn nút Create bucket.3. Hướng dẫn thực hiện bằng AWS CLIBash# 1. Tạo S3 Bucket tại Region ap-northeast-1
+aws s3api create-bucket \
+  --bucket enggo-media-bucket \
+  --region ap-northeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-northeast-1
+
+# 2. Bật tính năng Bucket Versioning
+aws s3api put-bucket-versioning \
+  --bucket enggo-media-bucket \
+  --versioning-configuration Status=Enabled
+
+# 3. Kích hoạt Server-side Encryption (SSE-S3)
+aws s3api put-bucket-encryption \
+  --bucket enggo-media-bucket \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }]
+  }'
+4. Cấu hình CORS (Cross-Origin Resource Sharing)Để Frontend Web/Mobile có thể gửi request upload hoặc preview tài nguyên trực tiếp lên S3 mà không bị lỗi trình duyệt:Vào enggo-media-bucket $\rightarrow$ Chọn tab Permissions $\rightarrow$ Kéo xuống mục Cross-origin resource sharing (CORS) $\rightarrow$ Chọn Edit.Dán đoạn cấu hình JSON sau:JSON[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": ["ETag"]
+  }
+]
+5. Kết quả nghiệm thu (Verification)Bucket enggo-media-bucket được khởi tạo thành công tại Region ap-northeast-1.Trạng thái Block all public access hiển thị On.Bật thành công Versioning và AES-256 Encryption.
+5.3.2. Tạo cơ sở dữ liệu Amazon RDS MySQL
+Amazon RDS (Relational Database Service) MySQL được lựa chọn làm cơ sở dữ liệu quan hệ quản lý thông tin người dùng, khóa học, dữ liệu bài tập và điểm số của hệ thống EngGo.
+
+Để đảm bảo tính an toàn tối đa, máy chủ cơ sở dữ liệu này được đặt hoàn toàn trong các Private Subnets và chỉ cho phép truy cập kết nối từ tầng Backend Spring Boot.
+
+1. Thông số cấu hình Amazon RDS MySQL
+Thông số	Giá trị cấu hình	Giải thích
+DB Engine	MySQL (phiên bản 8.0.x)	Hệ quản trị CSDL quan hệ chính của dự án EngGo.
+DB Instance Class	db.t3.micro / db.t4g.micro	Phù hợp cho môi trường thử nghiệm / Workshop tối ưu chi phí.
+Storage Type	General Purpose SSD (gp3)	Dung lượng: 20 GiB, hỗ trợ Auto-scaling dung lượng.
+DB Subnet Group	enggo-db-subnet-group	Nhóm Subnet bao gồm 2 Private Subnet (1a và 1c).
+Public Access	No	Không mở cổng công khai, chặn hoàn toàn truy cập từ Internet.
+VPC Security Group	enggo-db-sg	Chỉ chấp nhận kết nối Inbound Port 3306 từ enggo-backend-sg.
+Initial Database Name	tienganh_app	Tên cơ sở dữ liệu mặc định ứng dụng sẽ kết nối.
+Master Username	admin	Tài khoản quản trị viên chính của RDS.
+2. Các bước thực hiện trên AWS Management Console
+Bước A: Tạo DB Subnet Group
+Truy cập AWS Management Console → Tìm kiếm và chọn dịch vụ RDS.
+
+Menu bên trái chọn Subnet groups → Nhấn Create DB subnet group.
+
+Điền thông tin:
+
+Name: enggo-db-subnet-group
+
+Description: Subnet group for EngGo RDS MySQL in Private Subnets
+
+VPC: Chọn enggo-vpc
+
+Tại mục Add subnets:
+
+Availability Zones: Chọn ap-northeast-1a và ap-northeast-1c.
+
+Subnets: Tích chọn 2 ID tương ứng với enggo-private-subnet-1a (10.0.11.0/24) và enggo-private-subnet-1c (10.0.12.0/24).
+
+Nhấn Create.
+
+Bước B: Khởi tạo Database Instance
+Chọn Databases ở menu bên trái → Nhấn Create database.
+
+Chọn phương thức tạo: Standard create.
+
+Engine options: Chọn MySQL.
+
+Templates: Chọn Dev/Test (hoặc Free tier nếu dùng tài khoản ưu đãi).
+
+Settings:
+
+DB instance identifier: enggo-db
+
+Master username: admin
+
+Master password: Nhập mật khẩu quản trị (Lưu ý đồng bộ với biến ${DB_PASSWORD} trong Parameter Store).
+
+Instance configuration: Chọn db.t3.micro (hoặc db.t4g.micro).
+
+Storage: Giữ mặc định gp3, 20 GiB.
+
+Connectivity:
+
+Target VPC: Chọn enggo-vpc
+
+DB Subnet group: Chọn enggo-db-subnet-group vừa tạo.
+
+Public access: Chọn No.
+
+VPC security group: Chọn Choose existing → Chọn enggo-db-sg (xóa default SG nếu có).
+
+Availability Zone: No preference.
+
+Additional configuration:
+
+Initial database name: tienganh_app
+
+Nhấn Create database.
+
+3. Hướng dẫn thực hiện bằng AWS CLI
+Bash
+# 1. Tạo DB Subnet Group
+aws rds create-db-subnet-group \
+  --db-subnet-group-name enggo-db-subnet-group \
+  --db-subnet-group-description "Subnet group for EngGo RDS" \
+  --subnet-ids $SUBNET_PRI_1A $SUBNET_PRI_1C
+
+# 2. Khởi tạo RDS MySQL Instance
+aws rds create-db-instance \
+  --db-instance-identifier enggo-db \
+  --db-instance-class db.t3.micro \
+  --engine mysql \
+  --master-username admin \
+  --master-user-password "MắtKhẩuThựcTếCủaBạn" \
+  --allocated-storage 20 \
+  --no-publicly-accessible \
+  --db-subnet-group-name enggo-db-subnet-group \
+  --vpc-security-group-ids $DB_SG_ID \
+  --db-name tienganh_app \
+  --region ap-northeast-1
+4. Kết quả nghiệm thu (Verification)
+Status: DB Instance enggo-db chuyển sang trạng thái Available.
+
+Endpoint: Hệ thống cấp một chuỗi Endpoint dạng enggo-db.cbiigm4we5ha.ap-northeast-1.rds.amazonaws.com.
+
+Publicly Accessible: Trạng thái ghi nhận No (Chỉ truy cập được nội bộ từ Private Subnet).
+5.3.3. Thiết kế cơ sở dữ liệu tienganh_appCơ sở dữ liệu tienganh_app trên Amazon RDS MySQL đóng vai trò lưu trữ toàn bộ dữ liệu quan hệ của ứng dụng EngGo, bao gồm thông tin tài khoản, tiến trình học tập, cấu trúc bài học, bộ từ vựng và lịch sử các trận đấu PvP. Hệ thống sử dụng Spring Data JPA (Hibernate) để tự động ánh xạ các Entity Java vào các bảng trong CSDL tienganh_app.1. Sơ đồ thực thể liên kết (ERD Overview)Cơ sở dữ liệu tienganh_app được tổ chức thành 4 phân hệ chức năng chính:User Management: Quản lý tài khoản, vai trò (Roles) và thông tin cá nhân.Learning Content: Khóa học, bài học và từ vựng.Progress & Analytics: Lịch sử học tập, tiến trình ôn tập từ vựng.PvP System: Lịch sử phòng đấu, điểm xếp hạng (ELO) và chi tiết trận đấu Real-time.2. Bảng định nghĩa các Bảng dữ liệu chính trong tienganh_appTên Bảng (Table Name)Khóa ChínhCác Trường Quan TrọngQuan Hệ (Relationships)usersid (Long)username, email, password, avatar_url, elo_rating, created_at1-n với user_lessons, pvp_matchesrolesid (Integer)name (ROLE_USER, ROLE_ADMIN)n-m với users qua user_rolestopicsid (Long)title, description, image_url1-n với vocabulariesvocabulariesid (Long)word, phonetic, meaning, audio_url, topic_idn-1 với topics, 1-n với user_vocabulariesuser_vocabulariesid (Long)user_id, vocabulary_id, status, next_reviewn-1 với users, n-1 với vocabulariespvp_matchesid (String)player1_id, player2_id, winner_id, score1, score2, created_atn-1 với users3. Cấu hình và Script DDL cho CSDL tienganh_appCấu hình Spring Boot JPA (application-prod.yml)YAMLspring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:3306/tienganh_app?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: admin
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update # Tự động đồng bộ Entities với CSDL tienganh_app
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+Script DDL khởi tạo cấu hình bảng mẫu trong CSDL tienganh_appSQLUSE tienganh_app;
+
+-- 1. Bảng Quản lý Người dùng
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    avatar_url VARCHAR(255),
+    elo_rating INT DEFAULT 1000,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2. Bảng Chủ đề Từ vựng
+CREATE TABLE IF NOT EXISTS topics (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    description TEXT,
+    image_url VARCHAR(255)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 3. Bảng Từ vựng (Liên kết file âm thanh lưu trữ trên Amazon S3 qua audio_url)
+CREATE TABLE IF NOT EXISTS vocabularies (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    topic_id BIGINT NOT NULL,
+    word VARCHAR(100) NOT NULL,
+    phonetic VARCHAR(100),
+    meaning TEXT NOT NULL,
+    audio_url VARCHAR(255),
+    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+4. Kết quả nghiệm thu (Verification)Tầng JPA Hibernate kết nối chính xác tới Schema tienganh_app trên Amazon RDS MySQL.Các bảng dữ liệu được khởi tạo thành công với bộ mã ký tự utf8mb4 và đầy đủ các ràng buộc khóa ngoại (Foreign Keys).
+5.4. Xây dựng và triển khai ứng dụng
+5.4.2. Xây dựng Backend Spring Boot
+Tầng Backend của ứng dụng EngGo (enggo-backend) được phát triển dựa trên Spring Boot 3.4.3 và Java 21, tích hợp kiến trúc Cloud-Native để vận hành tối ưu trên môi trường AWS.
+
+1. Kiến trúc mô-đun Backend (Project Structure)
+Mã nguồn dự án được tổ chức theo cấu hình layered architecture chuẩn mực:
+
+config/: Cấu hình Security (JWT), Cross-Origin (CORS), AWS S3 SDK Client, WebSocket Stomp Endpoint, Redis Cache Configuration.
+
+controller/: Tiếp nhận và xử lý RESTful APIs (/api/v1/auth, /api/v1/topics, /api/v1/vocabularies) và các giao thức WebSocket Messaging (/ws/pvp).
+
+service/: Xử lý logic nghiệp vụ, tính toán điểm ELO PvP, Spaced Repetition cho từ vựng, giao tiếp với Amazon S3 để upload file media.
+
+repository/: Tầng truy xuất dữ liệu Spring Data JPA kết nối tới CSDL tienganh_app trên Amazon RDS MySQL.
+
+entity/: Khai báo các đối tượng JPA ánh xạ trực tiếp tới bảng trong CSDL tienganh_app.
+
+2. Cấu hình tích hợp AWS & Cloud Services (application-prod.yml)
+Dữ liệu cấu hình nhạy cảm được load trực tiếp từ môi trường runtime và AWS Systems Manager Parameter Store:
+
+YAML
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: enggo-backend
+  profiles:
+    active: prod
+
+  # Cấu hình Cơ sở dữ liệu MySQL RDS
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/tienganh_app?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: admin
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # Cấu hình Redis Cache & Session
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+# Cấu hình AWS SDK Services (S3 Storage)
+aws:
+  region: ${AWS_REGION:ap-northeast-1}
+  s3:
+    bucket-name: ${AWS_S3_BUCKET:enggo-media-bucket}
+    access-key: ${AWS_S3_ACCESS_KEY}
+    secret-key: ${AWS_S3_SECRET_KEY}
+
+# Cấu hình Bảo mật JWT
+jwt:
+  signerKey: ${JWT_SIGNER_KEY}
+3. Quy trình Đóng gói Docker Image (Dockerfile)
+Dự án sử dụng phương pháp Multi-stage Build để tối ưu hóa kích thước Docker Image nhỏ gọn, giúp quá trình deploy trên AWS ECS Fargate diễn ra nhanh chóng:
+
+Dockerfile
+# Stage 1: Build file JAR bằng Maven
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Stage 2: Khởi chạy ứng dụng nhẹ gọn bằng OpenJDK JRE
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+4. Các lệnh Build & Push Docker Image lên AWS ECR
+Bash
+# 1. Đăng nhập vào AWS Elastic Container Registry (ECR)
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin YOUR_ACCOUNT_ID.dkr.ecr.ap-northeast-1.amazonaws.com
+
+# 2. Build Docker Image cho enggo-backend
+docker build -t enggo-backend:latest .
+
+# 3. Gán Tag cho Image chuẩn theo ECR Repository
+docker tag enggo-backend:latest YOUR_ACCOUNT_ID.dkr.ecr.ap-northeast-1.amazonaws.com/enggo-backend:latest
+
+# 4. Push Image lên Amazon ECR
+docker push YOUR_ACCOUNT_ID.dkr.ecr.ap-northeast-1.amazonaws.com/enggo-backend:latest
+5. Kết quả nghiệm thu (Verification)
+Ứng dụng enggo-backend được đóng gói thành công thành tệp Docker Image với thẻ latest.
+
+Image được đẩy thành công lên Amazon ECR repository enggo-backend sẵn sàng để ECS Fargate kéo về triển khai.
+5.5. Triển khai ứng dụng lên AWS ECS Fargate và ALBSau khi đã build và push Docker Image của enggo-backend lên Amazon ECR, chúng ta tiến hành cấu hình Application Load Balancer (ALB) và triển khai ứng dụng trên AWS ECS Fargate để đảm bảo khả năng mở rộng (Auto Scaling) và hỗ trợ kết nối WebSockets (PvP mode) cùng Sticky Sessions.1. Tạo Application Load Balancer (ALB)ALB đóng vai trò tiếp nhận lưu lượng truy cập từ Internet (Port 80/443), điều hướng traffic đến các ECS Task chạy trong Private Subnet và xử lý Sticky Sessions.Các bước thực hiện:Tạo Target Group (enggo-backend-tg):Truy cập EC2 Console $\rightarrow$ Target Groups $\rightarrow$ Create target group.Target type: Chọn IP addresses (bắt buộc đối với Fargate network mode awsvpc).Target group name: enggo-backend-tgProtocol / Port: HTTP / 8080VPC: Chọn enggo-vpcHealth check path: /api/v1/health (hoặc /actuator/health).Nhấn Next $\rightarrow$ Create target group.Cấu hình Sticky Sessions & WebSockets:Chọn enggo-backend-tg vừa tạo $\rightarrow$ Tab Attributes $\rightarrow$ Nhấn Edit.Stickiness: Tích chọn Enable (Duration-based), đặt thời gian 86400 giây (1 ngày) để giữ kết nối ổn định cho WebSocket/PvP session.Nhấn Save changes.Khởi tạo ALB (enggo-alb):Truy cập EC2 Console $\rightarrow$ Load Balancers $\rightarrow$ Create load balancer $\rightarrow$ Chọn Application Load Balancer.Load balancer name: enggo-albScheme: Internet-facingNetwork mapping: Select enggo-vpc $\rightarrow$ Tích chọn 2 Public Subnets (enggo-public-subnet-1a và enggo-public-subnet-1c).Security groups: Chọn enggo-alb-sg.Listeners and routing:Protocol: HTTP | Port: 80 $\rightarrow$ Default action: Forward to enggo-backend-tg.Nhấn Create load balancer.2. Khởi tạo ECS Task DefinitionTask Definition khai báo cấu hình phần cứng (CPU/RAM), Docker Image và các biến môi trường/secrets cho container enggo-backend.Tệp cấu hình task-definition.json:JSON{
+  "family": "enggo-backend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/enggoTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "enggo-backend",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ap-northeast-1.amazonaws.com/enggo-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "DB_HOST", "value": "enggo-db.xxxx.ap-northeast-1.rds.amazonaws.com" },
+        { "name": "SPRING_REDIS_HOST", "value": "enggo-redis.xxxx.ng.0001.apne1.cache.amazonaws.com" },
+        { "name": "SPRING_REDIS_PORT", "value": "6379" }
+      ],
+      "secrets": [
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/DB_PASSWORD" },
+        { "name": "JWT_SIGNER_KEY", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/JWT_SIGNER_KEY" },
+        { "name": "AWS_S3_ACCESS_KEY", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/AWS_S3_ACCESS_KEY" },
+        { "name": "AWS_S3_SECRET_KEY", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/AWS_S3_SECRET_KEY" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/enggo-backend",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
+Lệnh đăng ký Task Definition qua AWS CLI:Bashaws ecs register-task-definition --cli-input-json file://task-definition.json
+3. Khởi tạo ECS Cluster & Triển khai ECS ServiceBước A: Tạo ECS ClusterBashaws ecs create-cluster --cluster-name enggo-cluster --region ap-northeast-1
+Bước B: Khởi tạo ECS Service gắn liền ALBTriển khai Service duy trì 2 Tasks tự động chạy trên các Private Subnets:Bashaws ecs create-service \
+  --cluster enggo-cluster \
+  --service-name enggo-backend-service \
+  --task-definition enggo-backend-task \
+  --desired-count 2 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_PRI_1A,$SUBNET_PRI_1C],securityGroups=[$BACKEND_SG_ID],assignPublicIp=DISABLED}" \
+  --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:ap-northeast-1:YOUR_ACCOUNT_ID:targetgroup/enggo-backend-tg/xxxx,containerName=enggo-backend,containerPort=8080" \
+  --region ap-northeast-1
+4. Kết quả nghiệm thu (Verification)Target Group Status: Kiểm tra tab Targets của enggo-backend-tg, cả 2 IP của Fargate Tasks đều chuyển sang trạng thái Healthy.REST API Test: Gửi HTTP GET request tới tên miền DNS của ALB:Bashcurl http://enggo-alb-123456789.ap-northeast-1.elb.amazonaws.com/api/v1/topics
+Kết quả: Nhận về HTTP Status 200 OK kèm dữ liệu JSON.WebSocket Test: Kết nối tới Endpoint WebSocket qua ALB:Bashwscat -c ws://enggo-alb-123456789.ap-northeast-1.elb.amazonaws.com/ws/pvp
+Kết quả: Nhận phản hồi Handshake 101 Switching Protocols thành công.
+5.5. Triển khai ứng dụng lên AWS ECS Fargate và ALBSau khi đã build và push Docker Image của enggo-backend lên Amazon ECR, chúng ta tiến hành cấu hình Application Load Balancer (ALB) và triển khai ứng dụng trên AWS ECS Fargate để đảm bảo khả năng mở rộng (Auto Scaling) và hỗ trợ kết nối WebSockets (PvP mode) cùng Sticky Sessions.1. Tạo Application Load Balancer (ALB)ALB đóng vai trò tiếp nhận lưu lượng truy cập từ Internet (Port 80/443), điều hướng traffic đến các ECS Task chạy trong Private Subnet và xử lý Sticky Sessions.Các bước thực hiện:Tạo Target Group (enggo-backend-tg):Truy cập EC2 Console $\rightarrow$ Target Groups $\rightarrow$ Create target group.Target type: Chọn IP addresses (bắt buộc đối với Fargate network mode awsvpc).Target group name: enggo-backend-tgProtocol / Port: HTTP / 8080VPC: Chọn enggo-vpcHealth check path: /api/v1/health (hoặc /actuator/health).Nhấn Next $\rightarrow$ Create target group.Cấu hình Sticky Sessions & WebSockets:Chọn enggo-backend-tg vừa tạo $\rightarrow$ Tab Attributes $\rightarrow$ Nhấn Edit.Stickiness: Tích chọn Enable (Duration-based), đặt thời gian 86400 giây (1 ngày) để giữ kết nối ổn định cho WebSocket/PvP session.Nhấn Save changes.Khởi tạo ALB (enggo-alb):Truy cập EC2 Console $\rightarrow$ Load Balancers $\rightarrow$ Create load balancer $\rightarrow$ Chọn Application Load Balancer.Load balancer name: enggo-albScheme: Internet-facingNetwork mapping: Select enggo-vpc $\rightarrow$ Tích chọn 2 Public Subnets (enggo-public-subnet-1a và enggo-public-subnet-1c).Security groups: Chọn enggo-alb-sg.Listeners and routing:Protocol: HTTP | Port: 80 $\rightarrow$ Default action: Forward to enggo-backend-tg.Nhấn Create load balancer.2. Khởi tạo ECS Task DefinitionTask Definition khai báo cấu hình phần cứng (CPU/RAM), Docker Image và các biến môi trường/secrets cho container enggo-backend.Tệp cấu hình task-definition.json:JSON{
+  "family": "enggo-backend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/enggoTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "enggo-backend",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ap-northeast-1.amazonaws.com/enggo-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "DB_HOST", "value": "enggo-db.xxxx.ap-northeast-1.rds.amazonaws.com" },
+        { "name": "SPRING_REDIS_HOST", "value": "enggo-redis.xxxx.ng.0001.apne1.cache.amazonaws.com" },
+        { "name": "SPRING_REDIS_PORT", "value": "6379" }
+      ],
+      "secrets": [
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/DB_PASSWORD" },
+        { "name": "JWT_SIGNER_KEY", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/JWT_SIGNER_KEY" },
+        { "name": "AWS_S3_ACCESS_KEY", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/AWS_S3_ACCESS_KEY" },
+        { "name": "AWS_S3_SECRET_KEY", "valueFrom": "arn:aws:ssm:ap-northeast-1:YOUR_ACCOUNT_ID:parameter/config/enggo-backend/AWS_S3_SECRET_KEY" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/enggo-backend",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
+Lệnh đăng ký Task Definition qua AWS CLI:Bashaws ecs register-task-definition --cli-input-json file://task-definition.json
+3. Khởi tạo ECS Cluster & Triển khai ECS ServiceBước A: Tạo ECS ClusterBashaws ecs create-cluster --cluster-name enggo-cluster --region ap-northeast-1
+Bước B: Khởi tạo ECS Service gắn liền ALBTriển khai Service duy trì 2 Tasks tự động chạy trên các Private Subnets:Bashaws ecs create-service \
+  --cluster enggo-cluster \
+  --service-name enggo-backend-service \
+  --task-definition enggo-backend-task \
+  --desired-count 2 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_PRI_1A,$SUBNET_PRI_1C],securityGroups=[$BACKEND_SG_ID],assignPublicIp=DISABLED}" \
+  --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:ap-northeast-1:YOUR_ACCOUNT_ID:targetgroup/enggo-backend-tg/xxxx,containerName=enggo-backend,containerPort=8080" \
+  --region ap-northeast-1
+4. Kết quả nghiệm thu (Verification)Target Group Status: Kiểm tra tab Targets của enggo-backend-tg, cả 2 IP của Fargate Tasks đều chuyển sang trạng thái Healthy.REST API Test: Gửi HTTP GET request tới tên miền DNS của ALB:Bashcurl http://enggo-alb-123456789.ap-northeast-1.elb.amazonaws.com/api/v1/topics
+Kết quả: Nhận về HTTP Status 200 OK kèm dữ liệu JSON.WebSocket Test: Kết nối tới Endpoint WebSocket qua ALB:Bashwscat -c ws://enggo-alb-123456789.ap-northeast-1.elb.amazonaws.com/ws/pvp
+Kết quả: Nhận phản hồi Handshake 101 Switching Protocols thành công.5.9. CI/CD5.9.1. Cấu hình AWS CodeBuildAWS CodeBuild tự động hóa quy trình biên dịch mã nguồn enggo-backend, đóng gói Docker Image và push lên Amazon ECR khi có code mới.1. Tạo tệp buildspec.yml ở thư mục gốc mã nguồn:YAMLversion: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/enggo-backend
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_COMMIT_HASH | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:-latest}
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker image...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"enggo-backend","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+artifacts:
+  files: imagedefinitions.json
+2. Các bước cấu hình trên Console:Truy cập AWS CodeBuild $\rightarrow$ Chọn Create build project.Project name: enggo-backend-build.Source: Chọn provider (GitHub/AWS CodeCommit) và chọn repository enggo-backend.Environment:Managed image | Operating system: Amazon Linux | Runtime: Standard | Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0.Tích chọn Privileged (Bắt buộc để build Docker images).Environment variables:AWS_ACCOUNT_ID: Nhập ID tài khoản AWS.AWS_DEFAULT_REGION: ap-northeast-1.Buildspec: Chọn Use a buildspec file.Nhấn Create build project.5.10. Giám sát hệ thống5.10.1. Cấu hình Amazon CloudWatchAmazon CloudWatch được sử dụng để theo dõi hiệu năng và thu thập Log từ các dịch vụ (ECS Fargate, RDS MySQL, ALB).1. Quản lý Log (CloudWatch Logs):Log Group: /ecs/enggo-backend tự động thu thập stdout/stderr từ các ECS Tasks running Spring Boot.Giúp truy vết các lỗi như runtime exceptions, kết nối CSDL, hoặc lỗi xác thực JWT.2. Các chỉ số hiệu năng chính (Metrics & Alarms):ECS Service Metrics:CPUUtilization: Tạo Alarm cảnh báo nếu CPU $> 80\%$ trong 5 phút.MemoryUtilization: Cảnh báo khi RAM $> 80\%$.RDS Metrics:DatabaseConnections: Số lượng kết nối tới CSDL tienganh_app.FreeStorageSpace: Cảnh báo khi dung lượng lưu trữ khả dụng $< 2\text{ GB}$.ALB Metrics:HTTPCode_Target_5XX_Count: Cảnh báo khi số lượng lỗi 5xx từ Backend gia tăng.TargetResponseTime: Theo dõi độ trễ phản hồi của API.5.11. Kiểm thửSau khi hoàn tất hạ tầng, tiến hành kiểm thử toàn diện hệ thống:1. Kiểm thử đơn vị & Tích hợp (Unit & Integration Testing):Chạy test suite của Spring Boot bằng lệnh mvn test để đảm bảo logic nghiệp vụ, repository tương tác CSDL tienganh_app không bị lỗi.2. Kiểm thử API qua ALB (End-to-End API Test):Sử dụng Postman gửi request đến DNS của ALB:POST http://<ALB-DNS>/api/v1/auth/login: Xác thực tài khoản và nhận về JWT token.GET http://<ALB-DNS>/api/v1/topics: Lấy danh sách chủ đề học tập.3. Kiểm thử tải & Kết nối Real-time (WebSocket / Load Testing):Sử dụng công cụ (như JMeter hoặc wscat) tạo kết nối tới Endpoint /ws/pvp để xác nhận kết nối WebSocket duy trì ổn định nhờ cấu hình Sticky Sessions trên ALB.4. Kiểm thử chịu lỗi (Failover & High Availability):Tắt thủ công 1 ECS Task trong Public/Private Subnet $\rightarrow$ Kiểm tra ALB tự động điều hướng lưu lượng sang Task còn lại mà không làm gián đoạn hệ thống.5.12. Dọn dẹp tài nguyênSau khi hoàn tất kiểm thử hoặc kết thúc buổi báo cáo Workshop, tiến hành xóa các tài nguyên theo thứ tự ngược lại để tránh phát sinh chi phí AWS ngoài ý muốn:1.Xóa ECS Service & Cluster:1-2 min.Truy cập ECS Console, hạ desired-count của enggo-backend-service về 0, xóa Service và xóa enggo-cluster.2.Xóa Load Balancer & Target Group:2 min.Xóa enggo-alb và xóa enggo-backend-tg.3.Xóa Amazon RDS & S3 Bucket:3 min.Xóa Database Instance enggo-db (Bỏ chọn 'Create final snapshot' nếu là lab). Empty và xóa S3 Bucket enggo-media-bucket.4.Xóa NAT Gateway & Elastic IP:2 min.Xóa enggo-nat-gw và Release Elastic IP tương ứng.5.Xóa VPC và các tài nguyên phụ thuộc:2 min.Xóa enggo-igw, VPC Endpoints, Route Tables, Subnets, Security Groups và cuối cùng là enggo-vpc.Lưu ý quan trọng về Chi phíBắt buộc phải xóa NAT Gateway và Elastic IP vì đây là các tài nguyên tính phí theo giờ bất kể bạn có truyền dữ liệu hay không.
