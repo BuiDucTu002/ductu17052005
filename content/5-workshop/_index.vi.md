@@ -1,6 +1,6 @@
 ---
 title: "5. Workshop - Triển khai EngGo trên AWS"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 5
 chapter: true
 ---

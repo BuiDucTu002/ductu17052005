@@ -1,6 +1,6 @@
 ---
 title: "2. Đề xuất"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 2
 chapter: false
 ---

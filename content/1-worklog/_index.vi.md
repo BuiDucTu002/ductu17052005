@@ -1,6 +1,6 @@
 ---
 title: "1. Nhật ký công việc"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 1
 chapter: false
 ---

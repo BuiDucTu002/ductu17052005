@@ -1,6 +1,6 @@
 ---
 title: "3.1. Blog 1 - Spring Boot Deployment on ECS Fargate"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 1
 chapter: false
 ---

@@ -1,6 +1,6 @@
 ---
 title: "3.3. Blog 3 - Infrastructure as Code with AWS CDK"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 3
 chapter: false
 ---

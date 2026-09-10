@@ -1,6 +1,6 @@
 ---
 title: "3. Blogs Posted"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 3
 chapter: false
 ---

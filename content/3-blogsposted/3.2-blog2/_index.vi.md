@@ -1,6 +1,6 @@
 ---
 title: "3.2. Blog 2 - Containerizing Java Applications with Docker"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 2
 chapter: false
 ---

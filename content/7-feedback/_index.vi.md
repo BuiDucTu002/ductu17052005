@@ -1,6 +1,6 @@
 ---
 title: "7. Chia sẻ, đóng góp ý kiến"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 7
 chapter: false
 ---

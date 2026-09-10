@@ -1,6 +1,6 @@
 ---
 title: "1.3. Tuần 3 worklog"
-date: "`r Sys.Date()`"
+date: 2026-09-10
 weight: 3
 chapter: false
 ---
