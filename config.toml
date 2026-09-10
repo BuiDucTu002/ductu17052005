@@ -19,6 +19,7 @@ home = [ "HTML", "RSS", "JSON"]
 [Languages.en]
 title = "AWS Account Setup Workshop - Bui Duc Tu"
 weight = 1
+[Languages.en.params]
 label = "English"
 
 [[Languages.en.menu.shortcuts]]
@@ -36,6 +37,7 @@ weight = 20
 [Languages.vi]
 title = "Workshop Thiết lập tài khoản AWS - Bùi Đức Tú"
 weight = 2
+[Languages.vi.params]
 label = "Tiếng Việt"
 
 [[Languages.vi.menu.shortcuts]]

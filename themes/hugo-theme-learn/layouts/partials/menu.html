@@ -39,7 +39,7 @@
       </section>
     {{end}}
 
-    {{ $isMultiLingual := gt (len .Site.Languages) 1 }}
+    {{ $isMultiLingual := gt (len .Site.Sites) 1 }}
     {{ if or $isMultiLingual $showvisitedlinks }}
     <section id="prefooter">
       <hr/>
@@ -50,19 +50,12 @@
             <i class="fas fa-language fa-fw"></i>
           <div class="select-style">
             <select id="select-language" onchange="location = this.value;">
-          {{ $siteLanguages := .Site.Languages}}
           {{ $pageLang := .Page.Lang}}
           {{ range .Page.AllTranslations }}
-              {{ $translation := .}}
-              {{ range $siteLanguages }}
-                  {{ if eq $translation.Lang .Lang }}
-                    {{ $selected := false }}
-                    {{ if eq $pageLang .Lang}}
-                      <option id="{{ $translation.Language }}" value="{{ $translation.Permalink }}" selected>{{ .LanguageName }}</option>
-                    {{ else }}
-                      <option id="{{ $translation.Language }}" value="{{ $translation.Permalink }}">{{ .LanguageName }}</option>
-                    {{ end }}
-                  {{ end }}
+              {{ if eq $pageLang .Lang}}
+                <option id="{{ .Language }}" value="{{ .Permalink }}" selected>{{ .Site.Params.label }}</option>
+              {{ else }}
+                <option id="{{ .Language }}" value="{{ .Permalink }}">{{ .Site.Params.label }}</option>
               {{ end }}
           {{ end }}
         </select>
