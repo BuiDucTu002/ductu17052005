@@ -1,3 +1,6 @@
+# Base URL of the deployed site (required for GitHub Pages project sites)
+baseURL = "https://buiductu002.github.io/ductu17052005/"
+
 # Change the default theme to be use when building the site with Hugo
 theme = "hugo-theme-learn"
 
@@ -51,4 +54,3 @@ name = "<i class='fab fa-facebook'></i> AWS Study Group - Nhóm FB"
 identifier = "AWS Study Group FB"
 url = "https://www.facebook.com/groups/awsstudygroupfcj"
 weight = 20
-
