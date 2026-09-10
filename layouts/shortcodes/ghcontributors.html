@@ -1,31 +1,43 @@
 <style type="text/css">
 .ghContributors{
-display:flex;
-flex-flow:  wrap;
-align-content: flex-start
+  display: flex;
+  flex-flow: wrap;
+  align-content: flex-start;
 }
 
 .ghContributors > div{
-width: 50% ;
-display: inline-flex;
-margin-bottom: 5px;
+  width: 50%;
+  display: inline-flex;
+  margin-bottom: 5px;
 }
 .ghContributors > div label{
-padding-left: 4px ;
+  padding-left: 4px;
 }
 .ghContributors > div span{
-font-size: x-small;
-padding-left: 4px ;
+  font-size: x-small;
+  padding-left: 4px;
 }
-
 </style>
+
 <div class="ghContributors">
   {{ $url := .Get 0 }}
-  {{ range getJSON $url }}
+  {{ $contributors := slice }}
+
+  {{ with resources.GetRemote $url }}
+    {{ with .Err }}
+      {{ warnf "Lỗi lấy dữ liệu từ GitHub: %s" . }}
+    {{ else }}
+      {{ $contributors = . | transform.Unmarshal }}
+    {{ end }}
+  {{ else }}
+    {{ warnf "Không thể tải URL: %s" $url }}
+  {{ end }}
+
+  {{ range $contributors }}
   <div>
-    <img src="{{.avatar_url}}" class="inline" width="32" height="32" style="height: 32px;height: 32px;margin-bottom:.25em; vertical-align:middle; ">
-    <label><a href="{{.html_url}}">@{{.login}}</a></label>
-    <span class="contributions">{{.contributions}} commits</span>
+    <img src="{{ .avatar_url }}" class="inline" width="32" height="32" style="height: 32px; width: 32px; margin-bottom:.25em; vertical-align:middle;">
+    <label><a href="{{ .html_url }}">@{{ .login }}</a></label>
+    <span class="contributions">{{ .contributions }} commits</span>
   </div>
   {{ end }}
 </div>
